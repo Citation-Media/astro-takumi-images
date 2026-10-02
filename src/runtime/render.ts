@@ -1,0 +1,286 @@
+import type { experimental_AstroContainer } from "astro/container";
+import { experimental_getFontFileURL, fontData } from "astro:assets";
+import { render } from "takumi-js";
+import type { FontLoader, RenderOptions } from "takumi-js";
+import { backend } from "virtual:astro-takumi-images/backend";
+import { config } from "virtual:astro-takumi-images/config";
+import stylesheets from "virtual:astro-takumi-images/css";
+import images from "virtual:astro-takumi-images/images";
+import { renderReact } from "virtual:astro-takumi-images/react";
+
+import { toTakumiCss } from "../css.js";
+import { sizePresets } from "../types.js";
+import type { ImageDefinition, ImageMap, ImageSize } from "../types.js";
+
+/** Loads the project's images; the module may export a map or a function that builds one. */
+export const loadImages = async (): Promise<ImageMap> =>
+  typeof images === "function" ? await images() : images;
+
+// ---------------------------------------------------------------------------------------------
+// Markup: React and Astro components render to HTML as on the server, which Takumi then draws.
+
+let astroContainer: Promise<experimental_AstroContainer> | undefined;
+
+const createContainer = async () => {
+  const { experimental_AstroContainer: Container } =
+    await import("astro/container");
+  return Container.create();
+};
+
+const isAstroComponent = (component: ImageDefinition["component"]) =>
+  "isAstroComponentFactory" in component &&
+  component.isAstroComponentFactory === true;
+
+const toHtml = async (definition: ImageDefinition) => {
+  const props = definition.props ?? {};
+  if (isAstroComponent(definition.component)) {
+    astroContainer ??= createContainer();
+    const container = await astroContainer;
+    return container.renderToString(
+      definition.component as Parameters<typeof container.renderToString>[0],
+      { props }
+    );
+  }
+  if (!renderReact) {
+    throw new Error(
+      "astro-takumi-images: a React component needs `react` and `react-dom` in the project."
+    );
+  }
+  return renderReact(definition.component, props);
+};
+
+// ---------------------------------------------------------------------------------------------
+// Fonts: the families of Astro's Fonts API, registered under their CSS variable, so the page's
+// font stacks such as `var(--font-sans, …)` resolve to the same files in the image.
+
+const familyOf = (variable: string) => variable.replace(/^--/u, "");
+const fontFormats = new Set([
+  "woff2",
+  "woff",
+  "truetype",
+  "opentype",
+  "ttf",
+  "otf",
+]);
+const fontFiles = new Map<string, Promise<ArrayBuffer>>();
+
+const download = async (url: string) => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(
+        `astro-takumi-images: font ${url} answered ${response.status}`
+      );
+    }
+    return await response.arrayBuffer();
+  } catch (error) {
+    // A failed download is not kept, so the next render tries again.
+    fontFiles.delete(url);
+    throw error;
+  }
+};
+
+/** Downloads each font file once per process or isolate. */
+const fetchFont = (url: string) => {
+  let file = fontFiles.get(url);
+  if (!file) {
+    file = download(url);
+    fontFiles.set(url, file);
+  }
+  return file;
+};
+
+const astroFonts = (requestUrl: URL | undefined): FontLoader[] =>
+  Object.entries(fontData).flatMap(([variable, faces]) => {
+    // Faces by file: a file that serves several weights is a variable font.
+    const files = new Map<
+      string,
+      { style: string | undefined; weights: Set<string> }
+    >();
+    for (const face of faces) {
+      const source = face.src.find(
+        (src) => !src.format || fontFormats.has(src.format)
+      );
+      if (source) {
+        const file = files.get(source.url) ?? {
+          style: face.style,
+          weights: new Set(),
+        };
+        file.weights.add(face.weight ?? "");
+        files.set(source.url, file);
+      }
+    }
+    return [...files].map(([url, file]) => {
+      const [only] = file.weights;
+      const weight = file.weights.size === 1 ? Number(only) : Number.NaN;
+      return {
+        data: () => fetchFont(experimental_getFontFileURL(url, requestUrl)),
+        name: familyOf(variable),
+        style: file.style === "italic" ? "italic" : "normal",
+        // Without a weight, a variable font keeps its axes live; with one, a static file keeps
+        // the weight Astro declared, including for a range such as `100 900`.
+        weight: Number.isFinite(weight) ? weight : undefined,
+      } satisfies FontLoader;
+    });
+  });
+
+const fontVariables = () =>
+  `:root { ${Object.keys(fontData)
+    .map((variable) => `${variable}: "${familyOf(variable)}"`)
+    .join("; ")} }`;
+
+// ---------------------------------------------------------------------------------------------
+// Size and CSS.
+
+let ratioScalesOutput: Promise<boolean> | undefined;
+
+/**
+ * takumi-js 2.14 keeps `width` and `height` as output pixels and scales the layout by
+ * `devicePixelRatio`; its documentation describes scaling the output instead. One raw 2 × 1
+ * render tells which applies, so sizes stay the same across Takumi updates.
+ */
+const detectRatioScaling = async () => {
+  const pixels = await render("<div></div>", {
+    ...backend,
+    devicePixelRatio: 2,
+    format: "raw",
+    height: 1,
+    width: 2,
+  });
+  return pixels.length > 2 * 1 * 4;
+};
+
+const sizeOf = (definition: ImageDefinition): ImageSize => {
+  const { size = "og" } = definition;
+  return typeof size === "string" ? sizePresets[size] : size;
+};
+
+const baseCss = new Map<string, string>();
+
+const cssFor = (canvas: { width: number; height: number }) => {
+  const key = `${canvas.width}x${canvas.height}`;
+  let css = baseCss.get(key);
+  if (css === undefined) {
+    const joined = stylesheets.join("\n");
+    css = config.tailwind ? toTakumiCss(joined, canvas) : joined;
+    baseCss.set(key, css);
+  }
+  return css;
+};
+
+const digest = async (text: string) => {
+  const bytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(text)
+  );
+  return [...new Uint8Array(bytes)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+};
+
+const cssDigests = new Map<string, Promise<string>>();
+
+const digestOnce = (css: string) => {
+  let hash = cssDigests.get(css);
+  if (!hash) {
+    hash = digest(css);
+    cssDigests.set(css, hash);
+  }
+  return hash;
+};
+
+export const extensionOf = (definition: ImageDefinition) =>
+  definition.format === "jpeg" ? "jpg" : (definition.format ?? "png");
+
+export const contentTypeOf = (definition: ImageDefinition) =>
+  `image/${definition.format ?? "png"}`;
+
+/** An image ready to render: its markup, its CSS, and the checksum of both. */
+export interface PreparedImage {
+  definition: ImageDefinition;
+  html: string;
+  css: string[];
+  size: ImageSize;
+  hash: string;
+  file: string;
+}
+
+/**
+ * Renders the component to HTML and computes the checksum of everything the image is made of:
+ * the HTML, the CSS, the font files, the size, and the encoding. The file name carries it, so a
+ * changed post, template, theme, or font yields a new URL by itself.
+ */
+export const prepareImage = async (
+  key: string,
+  definition: ImageDefinition
+): Promise<PreparedImage> => {
+  const size = sizeOf(definition);
+  const ratio = size.devicePixelRatio ?? 1;
+  const canvas = { height: size.height / ratio, width: size.width / ratio };
+  const html = await toHtml(definition);
+  const css = [cssFor(canvas)];
+  if (definition.css) {
+    css.push(
+      config.tailwind ? toTakumiCss(definition.css, canvas) : definition.css
+    );
+  }
+  if (config.fonts) {
+    css.unshift(fontVariables());
+  }
+  const hash = await digest(
+    [
+      html,
+      await digestOnce(css.join("\n")),
+      JSON.stringify({
+        fonts: config.fonts ? fontData : null,
+        format: definition.format ?? "png",
+        quality: "quality" in definition ? definition.quality : undefined,
+        renderer: config.renderer,
+        size,
+        version: definition.version,
+      }),
+    ].join("\n")
+  );
+  const shortHash = hash.slice(0, 12);
+  return {
+    css,
+    definition,
+    file: `${key}.${shortHash}.${extensionOf(definition)}`,
+    hash: shortHash,
+    html,
+    size,
+  };
+};
+
+/** Draws a prepared image with Takumi on the configured backend. */
+export const renderPrepared = async (
+  image: PreparedImage,
+  requestUrl: URL | undefined,
+  decodeCache: "auto" | "none"
+) => {
+  const { definition, size } = image;
+  const ratio = size.devicePixelRatio ?? 1;
+  ratioScalesOutput ??= detectRatioScaling();
+  const scaled = await ratioScalesOutput;
+  // Takumi types each format separately, and PNG takes no quality.
+  let encoding:
+    | { format: "png" }
+    | { format: "jpeg"; quality?: number }
+    | { format: "webp"; quality?: number } = { format: "png" };
+  if (definition.format === "jpeg") {
+    encoding = { format: "jpeg", quality: definition.quality };
+  } else if (definition.format === "webp") {
+    encoding = { format: "webp", quality: definition.quality };
+  }
+  const options: RenderOptions = {
+    ...backend,
+    ...encoding,
+    css: image.css,
+    devicePixelRatio: ratio,
+    fonts: config.fonts ? astroFonts(requestUrl) : [],
+    height: scaled ? size.height / ratio : size.height,
+    images: definition.images ?? { cache: decodeCache },
+    width: scaled ? size.width / ratio : size.width,
+  };
+  return render(image.html, options);
+};

@@ -1,0 +1,20 @@
+---
+import { Font } from "astro:assets";
+import { imageUrl } from "astro-takumi-images/runtime";
+
+const react = await imageUrl("react/card");
+const astro = await imageUrl("astro/card");
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>astro-takumi-images fixture</title>
+    <meta property="og:image" content={react} />
+    <Font cssVariable="--font-inter" />
+  </head>
+  <body>
+    <img id="react" src={react} alt="" />
+    <img id="astro" src={astro} alt="" />
+  </body>
+</html>

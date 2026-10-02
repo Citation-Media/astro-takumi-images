@@ -1,0 +1,19 @@
+{
+  "name": "fixture-node",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/node": "11.1.6",
+    "@astrojs/react": "7.0.0",
+    "@tailwindcss/vite": "4.3.3",
+    "astro": "7.3.5",
+    "astro-takumi-images": "file:../..",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3"
+  }
+}

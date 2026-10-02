@@ -1,0 +1,5 @@
+{
+  "name": "astro-takumi-images-fixture",
+  "compatibility_date": "2026-09-24",
+  "compatibility_flags": ["nodejs_compat"],
+}

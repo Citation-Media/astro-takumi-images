@@ -1,0 +1,14 @@
+{
+  "name": "fixture-shared",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@astrojs/react": "7.0.0",
+    "@tailwindcss/vite": "4.3.3",
+    "astro": "7.3.5",
+    "astro-takumi-images": "file:../..",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3"
+  }
+}

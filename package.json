@@ -1,0 +1,95 @@
+{
+  "name": "astro-takumi-images",
+  "version": "0.1.0",
+  "description": "Astro integration that renders Open Graph images and other social images from your React or Astro components with Takumi, prerendered or on demand, under URLs that change with their content.",
+  "keywords": [
+    "astro",
+    "astro-integration",
+    "og-image",
+    "open-graph",
+    "social-image",
+    "tailwind",
+    "takumi",
+    "withastro"
+  ],
+  "homepage": "https://github.com/Citation-Media/astro-takumi-images#readme",
+  "bugs": {
+    "url": "https://github.com/Citation-Media/astro-takumi-images/issues"
+  },
+  "license": "MIT",
+  "author": "Citation Media <info@citation.media>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Citation-Media/astro-takumi-images.git"
+  },
+  "workspaces": [
+    "fixtures/*"
+  ],
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./css": {
+      "types": "./dist/css.d.ts",
+      "default": "./dist/css.js"
+    },
+    "./route/static": "./dist/runtime/route-static.js",
+    "./route/on-demand": "./dist/runtime/route-on-demand.js"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit && ultracite check",
+    "fix": "ultracite fix",
+    "test": "vitest run test/unit",
+    "test:e2e": "npm run build && vitest run test/e2e",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@takumi-rs/wasm": "2.14.0",
+    "takumi-js": "2.14.0"
+  },
+  "devDependencies": {
+    "@astrojs/cloudflare": "14.3.3",
+    "@astrojs/node": "11.1.6",
+    "@astrojs/react": "7.0.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "astro": "7.3.5",
+    "oxfmt": "0.68.0",
+    "oxlint": "1.83.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "ultracite": "7.12.0",
+    "vitest": "5.0.3",
+    "wrangler": "4.146.0"
+  },
+  "peerDependencies": {
+    "astro": ">=6.0.0",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
