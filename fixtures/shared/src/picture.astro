@@ -1,0 +1,19 @@
+---
+import { Image, Picture } from "astro:assets";
+import type { imageSource } from "astro-takumi-images/runtime";
+
+interface Props {
+  thumbnail: Awaited<ReturnType<typeof imageSource>>;
+  animated: string | undefined;
+}
+
+const { thumbnail, animated } = Astro.props;
+---
+
+<html lang="en">
+  <body>
+    {thumbnail && <Image id="image" {...thumbnail} width={800} height={450} alt="" />}
+    {thumbnail && <Picture id="picture" {...thumbnail} formats={["avif", "webp"]} widths={[400, 800]} alt="" />}
+    <img id="animated" src={animated} alt="" />
+  </body>
+</html>

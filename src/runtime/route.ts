@@ -4,7 +4,8 @@ import { config } from "virtual:astro-takumi-images/config";
 import { contentTypeOf, prepareImage, renderPrepared } from "./render.js";
 import { templates } from "./templates.js";
 
-const file = /^(?<path>.+)\.(?<hash>[\da-f]{12})\.(?<extension>png|jpg|webp)$/u;
+const file =
+  /^(?<path>.+)\.(?<hash>[\da-f]{12})\.(?<extension>png|jpg|webp|apng|gif)$/u;
 
 const empty = (status: number, headers: Record<string, string> = {}) =>
   new Response(null, {

@@ -64,6 +64,40 @@ const serve = async (
   throw new Error(`${command} did not start on ${origin}`);
 };
 
+/** The image URLs of `<Image>` and `<Picture>` on the fixture's picture page. */
+const pictureSources = (html: string) => [
+  ...new Set(
+    [...html.matchAll(/(?:src|srcset)="(?<urls>[^"]*)"/gu)].flatMap((match) =>
+      (match.groups?.urls ?? "")
+        .split(",")
+        .map(
+          (candidate) =>
+            candidate.trim().split(" ")[0]?.replaceAll("&amp;", "&") ?? ""
+        )
+        .filter(
+          (url) => url.startsWith("/_image") || url.startsWith("/og/thumbnail/")
+        )
+    )
+  ),
+];
+
+/** Checks that Astro's image service turned the Takumi source into AVIF, WebP, and PNG. */
+const expectPicture = async (origin: string) => {
+  const response = await fetch(`${origin}/picture`);
+  const sources = pictureSources(await response.text());
+  expect(sources.length).toBeGreaterThanOrEqual(6);
+  const types = await Promise.all(
+    sources.map(async (source) => {
+      const image = await fetch(`${origin}${source}`);
+      expect(image.status).toBe(200);
+      return image.headers.get("content-type");
+    })
+  );
+  expect(new Set(types)).toEqual(
+    new Set(["image/avif", "image/webp", "image/png"])
+  );
+};
+
 /** Checks the on-demand route: the current URL renders, an old one redirects, an unknown one is missing. */
 const expectOnDemand = async (origin: string) => {
   const response = await fetch(origin);
@@ -242,6 +276,8 @@ describe("on demand", () => {
       );
       try {
         await expectOnDemand(origin);
+        // Cloudflare Images through the adapter's IMAGES binding.
+        await expectPicture(origin);
       } finally {
         await run(astro, ["preview", "stop"], { cwd }).catch(() => {});
       }

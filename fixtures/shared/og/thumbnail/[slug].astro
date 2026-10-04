@@ -1,0 +1,10 @@
+---
+// A lossless PNG source for Astro's <Image> and <Picture>, which convert and resize it.
+export const image = { size: "thumbnail" };
+
+export const getStaticPaths = () => [{ params: { slug: "hello" } }];
+---
+
+<div class="flex h-full w-full items-center justify-center bg-linear-to-br from-amber-400 to-rose-500 p-20 font-sans">
+  <h1 class="text-8xl font-semibold text-white">{Astro.params.slug}</h1>
+</div>

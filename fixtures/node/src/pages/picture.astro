@@ -1,0 +1,10 @@
+---
+import { imageSource, imageUrl } from "astro-takumi-images/runtime";
+
+import Page from "../../../shared/src/picture.astro";
+
+const thumbnail = await imageSource("thumbnail/hello", Astro);
+const animated = await imageUrl("animated", Astro);
+---
+
+<Page thumbnail={thumbnail} animated={animated} />

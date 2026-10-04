@@ -14,7 +14,9 @@ export { sizePresets } from "./types.js";
 export type {
   ImageComponent,
   ImageConfig,
+  ImageAnimation,
   ImageEncoding,
+  ImageFormat,
   ImageParams,
   ImageSize,
   PageCacheOptions,
@@ -170,6 +172,7 @@ export default function takumiImages(
           cacheMaxAge: options.cacheMaxAge ?? 31_536_000,
           fonts: options.fonts ?? true,
           pageCache: options.pageCache ?? defaultPageCache,
+          prerender,
           renderer: `astro-takumi-images@${packageVersion(require, "astro-takumi-images")} takumi-js@${packageVersion(require, "takumi-js")}`,
           route,
           tailwind: options.tailwind ?? true,
@@ -242,6 +245,11 @@ export default function takumiImages(
           prerender,
         });
         updateConfig({
+          // On demand, `imageSource()` hands the image service the image's absolute URL, so the
+          // site's own host has to be an allowed remote image domain.
+          ...(!prerender && config.site
+            ? { image: { domains: [new URL(config.site).hostname] } }
+            : {}),
           vite: { plugins: [plugin] },
         });
       },

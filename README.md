@@ -1,10 +1,11 @@
 # astro-takumi-images
 
-Open Graph images, social cards, and thumbnails for [Astro](https://astro.build), drawn by [Takumi](https://takumi.kane.tw) from your own Astro or React templates. No headless browser and no fixed layouts: a template is a file in `src/og`, routed like a page, and it renders for static sites and on demand alike.
+Open Graph images, thumbnails, social cards, and animations for [Astro](https://astro.build), drawn by [Takumi](https://takumi.kane.tw) from your own Astro or React templates. No headless browser and no fixed layouts: a template is a file in `src/og`, routed like a page, and it renders for static sites and on demand alike.
 
 - **Templates as files.** `src/og/blog/[slug].astro` answers `/og/blog/hello.<checksum>.png`. A template reads its parameters and fetches its own data, like a page.
 - **One rule for caching.** The checksum in every image URL covers everything the image is made of, so a URL never changes its content and is cached forever. A changed post, template, theme, or font gets a new URL by itself.
 - **Astro's route cache.** Pages that link an image are cached with Astro's own cache API and tagged per image; nothing is tied to a hosting provider.
+- **Astro's `<Image>` and `<Picture>`.** Takumi draws a lossless source, and your image service (sharp, Cloudflare Images, or another) resizes it and converts it to AVIF and WebP, for thumbnails and every other image on a page.
 - **Every runtime.** Node.js and Bun use Takumi's native addon; Cloudflare Workers (workerd), Deno, and other edge runtimes use WebAssembly.
 - **Your design system.** Tailwind CSS v4 and other stylesheets compile through Vite, and the families of Astro's Fonts API render with the same files as your pages.
 
@@ -103,6 +104,51 @@ export default async function Thumbnail({
 }
 ```
 
+## Images On Pages
+
+An image can be more than `og:image`. For thumbnails, cards, and hero images, hand it to Astro's `<Image>` and `<Picture>` with `imageSource(path, Astro)`. Takumi draws the template once as a lossless PNG at its full size, and the project's image service does what it does for every other image: responsive widths, AVIF and WebP, and the host's own optimizer.
+
+```astro title="src/pages/blog/index.astro"
+---
+import { Picture } from "astro:assets";
+import { imageSource } from "astro-takumi-images/runtime";
+
+const thumbnail = await imageSource("blog/hello.thumbnail", Astro);
+---
+
+{thumbnail && (
+  <Picture {...thumbnail} formats={["avif", "webp"]} widths={[400, 800, 1600]} sizes="(min-width: 60rem) 50vw, 100vw" alt="" />
+)}
+```
+
+`imageSource()` returns `{ src, width, height }` for spreading into `<Image>` and `<Picture>`:
+
+- **Prerendered**, `src` is image metadata, so the build reads the file Takumi wrote and processes it like an imported image, without a running server.
+- **On demand**, `src` is the image's absolute URL, which the image service fetches like a remote image. Astro has to allow the site's host: the integration adds the host of `site` to `image.domains`; for other hosts, add them yourself.
+
+Keep such templates on their default PNG, so the image service starts from a lossless source; set `size` to the largest width you serve. Tested with sharp (static, Node.js, `astro dev`) and with Cloudflare Images through the Cloudflare adapter's `IMAGES` binding. Takumi itself writes PNG, JPEG, and WebP; AVIF comes from the image service.
+
+For an image that only needs its own URL, such as `og:image` or a plain `<img>`, `imageUrl(path, Astro)` returns the path of the file Takumi rendered, in the template's format.
+
+## Animations
+
+A template with an `animation` renders its CSS animations into an animated WebP (default), APNG, or GIF:
+
+```astro title="src/og/pulse.astro"
+---
+export const image = { animation: { duration: 1000, fps: 20 }, format: "webp", size: { width: 600, height: 315 } };
+---
+
+<div class="flex h-full w-full items-center justify-center bg-slate-950">
+  <style is:inline>
+    @keyframes grow { from { transform: scale(0.5); } to { transform: scale(1); } }
+  </style>
+  <div class="size-32 rounded-full bg-sky-400" style="animation: grow 1s ease-in-out infinite alternate"></div>
+</div>
+```
+
+Link animations with `imageUrl()`; image services usually keep only the first frame. Tailwind's `animate-spin`, `animate-ping`, `animate-pulse`, and `animate-bounce` and arbitrary `animate-[…]` values play as well.
+
 ## Caching
 
 ### The rule
@@ -131,7 +177,7 @@ Pages and images render once per build; there is nothing to configure. Prerender
    });
    ```
 
-2. **Call `imageUrl(path, Astro)` in the page's frontmatter**, not in a layout or component. Astro streams pages, so only the page's frontmatter can still set its cache options. The page then gets:
+2. **Call `imageUrl(path, Astro)` or `imageSource(path, Astro)` in the page's frontmatter**, not in a layout or component. Astro streams pages, so only the page's frontmatter can still set its cache options. The page then gets:
    - the tag `og-image:<path>` for each image it links,
    - and, if it sets no lifetime itself, `pageCache`: by default **30 minutes** fresh (`maxAge: 1800`), then up to a day in which the cache serves the page while it renders again in the background (`swr: 86400`).
 
@@ -233,7 +279,8 @@ The `image` export of a template:
 | Field | Description |
 | --- | --- |
 | `size` | `"og"` (1200 × 630, default), `"square"` (1200 × 1200), `"thumbnail"` (1600 × 900), or `{ width, height, devicePixelRatio? }`; `devicePixelRatio` lays out at the size divided by it. |
-| `format`, `quality` | `"png"` (default), `"jpeg"`, or `"webp"`; `quality` 0 to 100 for JPEG and WebP. |
+| `format`, `quality` | `"png"` (default and best as a source for `<Image>`), `"jpeg"`, or `"webp"`; animations `"webp"` (default), `"apng"`, or `"gif"`. `quality` 0 to 100 for JPEG and WebP. |
+| `animation` | `{ duration, fps? }` in milliseconds and frames per second (default 30): render the template's CSS animations. |
 | `css` | Further CSS for this template. |
 | `images` | Takumi's image options, such as pre-fetched `sources` for local files: `images: [{ src: "logo", data }]` with `<img src="logo">`. Remote `src` URLs load without it. |
 | `version` | Changes the checksum for inputs it cannot see, such as the bytes behind an image `src`. |
@@ -243,6 +290,7 @@ The `image` export of a template:
 From `astro-takumi-images/runtime`:
 
 - `imageUrl(path, Astro?)` returns the current path of an image, such as `/og/blog/hello.8e0d6b2a91c3.png`, or `undefined` when no template answers it. With `Astro`, it tags and caches the page as described in [Caching](#caching).
+- `imageSource(path, Astro)` returns `{ src, width, height }` for Astro's `<Image>` and `<Picture>`, as described in [Images On Pages](#images-on-pages), and tags the page like `imageUrl()`.
 - `imageTag(path)` returns the cache tag of an image's pages, for `cache.invalidate()`.
 - `renderImage(path, { url }?)` renders an image to bytes, for endpoints and tests; on demand, pass the request URL so Astro can locate the font files.
 

@@ -1,0 +1,14 @@
+---
+// Plays the CSS animation into an animated WebP.
+export const image = { animation: { duration: 1000, fps: 10 }, size: { height: 210, width: 400 } };
+---
+
+<div class="flex h-full w-full items-center justify-center bg-slate-950">
+  <style is:inline>
+    @keyframes grow {
+      from { transform: scale(0.5); }
+      to { transform: scale(1); }
+    }
+  </style>
+  <div class="h-32 w-32 rounded-full bg-sky-400" style="animation: grow 1s ease-in-out infinite alternate"></div>
+</div>

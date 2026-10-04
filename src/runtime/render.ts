@@ -1,6 +1,6 @@
 import type { experimental_AstroContainer } from "astro/container";
 import { experimental_getFontFileURL, fontData } from "astro:assets";
-import { render } from "takumi-js";
+import { render, renderAnimation } from "takumi-js";
 import type { FontLoader, RenderOptions } from "takumi-js";
 import { backend } from "virtual:astro-takumi-images/backend";
 import { config } from "virtual:astro-takumi-images/config";
@@ -200,11 +200,17 @@ const digestOnce = (css: string) => {
   return hash;
 };
 
-export const extensionOf = (definition: ImageConfig) =>
-  definition.format === "jpeg" ? "jpg" : (definition.format ?? "png");
+/** The format an image renders in: PNG by default, animated WebP for an animation. */
+export const formatOf = (definition: ImageConfig) =>
+  definition.format ?? (definition.animation ? "webp" : "png");
+
+export const extensionOf = (definition: ImageConfig) => {
+  const format = formatOf(definition);
+  return format === "jpeg" ? "jpg" : format;
+};
 
 export const contentTypeOf = (definition: ImageConfig) =>
-  `image/${definition.format ?? "png"}`;
+  `image/${formatOf(definition)}`;
 
 /** An image ready to render: its markup, its CSS, and the checksum of both. */
 export interface PreparedImage {
@@ -255,8 +261,9 @@ export const prepareImage = async (
       html,
       await digestOnce(css.join("\n")),
       JSON.stringify({
+        animation: definition.animation,
         fonts: config.fonts ? fontData : null,
-        format: definition.format ?? "png",
+        format: formatOf(definition),
         quality: "quality" in definition ? definition.quality : undefined,
         renderer: config.renderer,
         size,
@@ -285,25 +292,44 @@ export const renderPrepared = async (
   const ratio = size.devicePixelRatio ?? 1;
   ratioScalesOutput ??= detectRatioScaling();
   const scaled = await ratioScalesOutput;
+  const shared = {
+    ...backend,
+    css: image.css,
+    devicePixelRatio: ratio,
+    fonts: config.fonts ? astroFonts(requestUrl) : [],
+    height: scaled ? size.height / ratio : size.height,
+    width: scaled ? size.width / ratio : size.width,
+  };
+  const quality = "quality" in definition ? definition.quality : undefined;
+  if (definition.animation) {
+    const format = formatOf(definition);
+    // An animation plays the template's CSS animations; it is one scene of the given length.
+    const timeline = {
+      ...shared,
+      fps: definition.animation.fps ?? 30,
+      scenes: [{ durationMs: definition.animation.duration, node: image.html }],
+    };
+    // Takumi types each animation format separately, and only WebP takes a quality.
+    if (format === "apng") {
+      return renderAnimation({ ...timeline, format: "apng" });
+    }
+    if (format === "gif") {
+      return renderAnimation({ ...timeline, format: "gif" });
+    }
+    return renderAnimation({ ...timeline, format: "webp", quality });
+  }
   // Takumi types each format separately, and PNG takes no quality.
   let encoding:
     | { format: "png" }
     | { format: "jpeg"; quality?: number }
     | { format: "webp"; quality?: number } = { format: "png" };
-  if (definition.format === "jpeg") {
-    encoding = { format: "jpeg", quality: definition.quality };
-  } else if (definition.format === "webp") {
-    encoding = { format: "webp", quality: definition.quality };
+  if (definition.format === "jpeg" || definition.format === "webp") {
+    encoding = { format: definition.format, quality };
   }
   const options: RenderOptions = {
-    ...backend,
+    ...shared,
     ...encoding,
-    css: image.css,
-    devicePixelRatio: ratio,
-    fonts: config.fonts ? astroFonts(requestUrl) : [],
-    height: scaled ? size.height / ratio : size.height,
     images: definition.images ?? { cache: decodeCache },
-    width: scaled ? size.width / ratio : size.width,
   };
   return render(image.html, options);
 };

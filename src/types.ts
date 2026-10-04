@@ -16,11 +16,27 @@ export const sizePresets = {
 
 export type SizePreset = keyof typeof sizePresets;
 
-/** PNG by default; `quality` (0 to 100) applies to JPEG and WebP, and WebP without it is lossless. */
+/**
+ * PNG by default, which is lossless and the best source for Astro's `<Image>` and `<Picture>`;
+ * `quality` (0 to 100) applies to JPEG and WebP, and WebP without it is lossless. Animations
+ * render as WebP, APNG, or GIF.
+ */
 export type ImageEncoding =
   | { format?: "png" }
   | { format: "jpeg"; quality?: number }
-  | { format: "webp"; quality?: number };
+  | { format: "webp"; quality?: number }
+  | { format: "apng" }
+  | { format: "gif" };
+
+export type ImageFormat = NonNullable<ImageEncoding["format"]>;
+
+/** Plays the template's CSS animations into an animated WebP, APNG, or GIF. */
+export interface ImageAnimation {
+  /** Length in milliseconds. */
+  duration: number;
+  /** Frames per second; defaults to 30. */
+  fps?: number;
+}
 
 /** How a template is drawn: the `image` export of a template file. */
 export type ImageConfig = ImageEncoding & {
@@ -32,6 +48,8 @@ export type ImageConfig = ImageEncoding & {
   images?: ImagesInput;
   /** Changes the URL for inputs the checksum cannot see, such as the bytes behind an image `src`. */
   version?: string;
+  /** Render an animation instead of one frame; `format` is then `webp` (default), `apng`, or `gif`. */
+  animation?: ImageAnimation;
 };
 
 /**
@@ -63,6 +81,8 @@ export interface PageCacheOptions {
 /** Options the integration passes to the runtime. */
 export interface RuntimeConfig {
   route: string;
+  /** Whether the route is prerendered, which decides what `imageSource()` hands to `<Image>`. */
+  prerender: boolean;
   /** Root-relative folder of the templates, such as `/src/og/`. */
   templates: string;
   /** Versions of this package and Takumi, part of every checksum, so an update renews the URLs. */
