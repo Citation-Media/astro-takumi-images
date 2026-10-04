@@ -6,19 +6,20 @@ import { fileURLToPath } from "node:url";
 import type { AstroIntegration } from "astro";
 import type { Plugin } from "vite";
 
-import type { RuntimeConfig } from "./types.js";
+import type { PageCacheOptions, RuntimeConfig } from "./types.js";
 
 export { toTakumiCss } from "./css.js";
 export type { TakumiCanvas } from "./css.js";
 export { sizePresets } from "./types.js";
 export type {
   ImageComponent,
-  ImageDefinition,
+  ImageConfig,
   ImageEncoding,
-  ImageMap,
+  ImageParams,
   ImageSize,
-  ImageSource,
+  PageCacheOptions,
   SizePreset,
+  TemplateModule,
 } from "./types.js";
 
 /**
@@ -34,10 +35,11 @@ export type TakumiRuntime = "auto" | "native" | "wasm";
 
 export interface TakumiImagesOptions {
   /**
-   * Module whose default export is the images, as a map or a function that builds one, such as
-   * `./src/og-images.ts`. Paths are relative to the project root.
+   * Folder of the image templates, relative to the project root. Every `.astro`, `.tsx`, and
+   * `.jsx` file in it is a template, routed like a page: `blog/[slug].astro` answers
+   * `<route>/blog/hello.<checksum>.png`. Files and folders starting with `_` are skipped.
    */
-  images: string;
+  templates?: string;
   /** Path the images are served under. */
   route?: string;
   /**
@@ -58,10 +60,14 @@ export interface TakumiImagesOptions {
   styleGlobs?: string[];
   /** Adapt the CSS to Takumi's engine (`clamp()`, container queries, `dark:`); see `toTakumiCss`. */
   tailwind?: boolean;
-  /** Cache lifetime in seconds; URLs change with their content, so the default is one year. */
+  /** Cache lifetime of image files in seconds; their URLs change with their content, so one year. */
   cacheMaxAge?: number;
-  /** Extra tags for Astro's route cache, besides `takumi-images`. */
-  cacheTags?: string[];
+  /**
+   * Route cache for pages that call `imageUrl(path, Astro)` and set no lifetime themselves: how
+   * long Astro's route cache keeps the page, and with it the image URL it computed. `false`
+   * leaves pages alone. Takes effect only with a cache provider.
+   */
+  pageCache?: PageCacheOptions | false;
   /**
    * Add a `_headers` rule that caches prerendered images forever on hosts that read it, such as
    * Cloudflare and Netlify. Static files lose the headers the route sets.
@@ -70,7 +76,10 @@ export interface TakumiImagesOptions {
 }
 
 const prefix = "virtual:astro-takumi-images/";
-const modules = ["config", "images", "css", "backend", "react"] as const;
+const modules = ["config", "templates", "css", "backend", "react"] as const;
+
+/** Thirty minutes of freshness, then a day in which the cache serves the page while it renders. */
+const defaultPageCache: PageCacheOptions = { maxAge: 1800, swr: 86_400 };
 
 const backendModule = (runtime: TakumiRuntime) => {
   if (runtime === "native") {
@@ -123,13 +132,13 @@ const canResolve = (root: string, specifier: string) => {
 };
 
 /**
- * Astro integration that serves images rendered by Takumi from your own React or Astro
- * components under `<route>/<key>.<checksum>.<extension>`. The checksum covers everything the
+ * Astro integration that serves images rendered by Takumi from the React and Astro templates in
+ * `src/og` under `<route>/<path>.<checksum>.<extension>`. The checksum covers everything the
  * image is made of, so every URL is cached forever and a changed image gets a new URL; nothing
  * has to be purged. Images are prerendered for static sites and rendered on demand otherwise.
  */
 export default function takumiImages(
-  options: TakumiImagesOptions
+  options: TakumiImagesOptions = {}
 ): AstroIntegration {
   const route = `/${(options.route ?? "/og").replaceAll(/^\/+|\/+$/gu, "")}`;
   const runtime = options.runtime ?? "auto";
@@ -156,13 +165,15 @@ export default function takumiImages(
         const root = fileURLToPath(config.root);
         prerender = options.prerender ?? config.output === "static";
         const require = createRequire(import.meta.url);
+        const templates = `${fromRoot(root, options.templates ?? "./src/og").replace(/\/$/u, "")}/`;
         const runtimeConfig: RuntimeConfig = {
           cacheMaxAge: options.cacheMaxAge ?? 31_536_000,
-          cacheTags: options.cacheTags ?? [],
           fonts: options.fonts ?? true,
+          pageCache: options.pageCache ?? defaultPageCache,
           renderer: `astro-takumi-images@${packageVersion(require, "astro-takumi-images")} takumi-js@${packageVersion(require, "takumi-js")}`,
           route,
           tailwind: options.tailwind ?? true,
+          templates,
         };
         const stylesheetImports = (options.stylesheets ?? []).map(
           (sheet, index) =>
@@ -180,10 +191,25 @@ export default function takumiImages(
             };`,
             `export default [${stylesheetImports.map((_, index) => `sheet${index}`).join(", ")}${stylesheetImports.length > 0 ? ", " : ""}...globbed];`,
           ].join("\n"),
-          images: `export { default } from ${JSON.stringify(fromRoot(root, options.images))};`,
-          react: canResolve(root, "react-dom/server")
-            ? `import { createElement } from "react";\nimport { renderToStaticMarkup } from "react-dom/server";\nexport const renderReact = (component, props) => renderToStaticMarkup(createElement(component, props));`
+          // React's prerender waits for async components, so React templates can fetch their data.
+          react: canResolve(root, "react-dom/static")
+            ? [
+                `import { createElement } from "react";`,
+                `import { prerender } from "react-dom/static";`,
+                `export const renderReact = async (component, props) => {`,
+                `  const { prelude } = await prerender(createElement(component, props));`,
+                `  return new Response(prelude).text();`,
+                `};`,
+              ].join("\n")
             : "export const renderReact = undefined;",
+          templates: `export const templateFiles = import.meta.glob(${JSON.stringify(
+            [
+              `${templates}**/*.astro`,
+              `${templates}**/*.{tsx,jsx}`,
+              `!${templates}**/_*`,
+              `!${templates}**/_*/**`,
+            ]
+          )});`,
         };
         const plugin: Plugin = {
           // The runtime imports the virtual modules and `astro:assets`, so every server

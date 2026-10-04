@@ -5,9 +5,8 @@ declare module "virtual:astro-takumi-images/config" {
   export const config: import("./src/types.ts").RuntimeConfig;
 }
 
-declare module "virtual:astro-takumi-images/images" {
-  const images: import("./src/types.ts").ImageSource;
-  export default images;
+declare module "virtual:astro-takumi-images/templates" {
+  export const templateFiles: Record<string, () => Promise<unknown>>;
 }
 
 declare module "virtual:astro-takumi-images/css" {
@@ -27,6 +26,6 @@ declare module "virtual:astro-takumi-images/react" {
     | ((
         component: import("./src/types.ts").ImageComponent,
         props: Record<string, unknown>
-      ) => string)
+      ) => Promise<string>)
     | undefined;
 }

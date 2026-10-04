@@ -1,0 +1,14 @@
+---
+export const getStaticPaths = () => [{ params: { slug: "hello" } }, { params: { slug: "world" } }];
+
+const { slug } = Astro.params;
+
+// Counts template runs, so the tests can tell a cached page from a fresh one.
+const counter = globalThis as { templateRuns?: number };
+counter.templateRuns = (counter.templateRuns ?? 0) + 1;
+---
+
+<div class="flex h-full w-full flex-col justify-end bg-emerald-950 p-20 font-sans text-white">
+  <p class="font-mono text-2xl text-emerald-300">/blog/{slug}</p>
+  <h1 class="text-7xl font-semibold capitalize">{slug}</h1>
+</div>

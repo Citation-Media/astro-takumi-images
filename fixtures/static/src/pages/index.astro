@@ -1,5 +1,13 @@
 ---
+import { imageUrl } from "astro-takumi-images/runtime";
+
 import Page from "../../../shared/src/index.astro";
+
+// In the page itself, not in a layout: Astro streams pages, so only the page's frontmatter can
+// still set the route cache that ties this page to its images.
+const react = await imageUrl("react/card", Astro);
+const astro = await imageUrl("astro/card", Astro);
+const blog = await imageUrl("blog/hello", Astro);
 ---
 
-<Page />
+<Page react={react} astro={astro} blog={blog} />

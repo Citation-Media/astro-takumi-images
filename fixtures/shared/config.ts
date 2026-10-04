@@ -25,11 +25,7 @@ export const sharedConfig = (
   ],
   integrations: [
     react(),
-    takumiImages({
-      images: "../shared/src/og-images.ts",
-      stylesheets: ["../shared/src/global.css"],
-      ...options,
-    }),
+    takumiImages({ stylesheets: ["../shared/src/global.css"], ...options }),
   ],
   vite: { plugins: [tailwindcss()] },
 });

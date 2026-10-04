@@ -53,7 +53,8 @@ const serve = async (
   // oxlint-disable no-await-in-loop, promise/avoid-new, no-promise-executor-return
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
-      await fetch(origin);
+      // An unknown image answers 404 uncached, so waiting leaves the page cache untouched.
+      await fetch(`${origin}/og/missing.000000000000.png`);
       return origin;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -86,6 +87,15 @@ const expectOnDemand = async (origin: string) => {
   const thumbnail = await fetch(`${origin}${webp}`);
   expect(thumbnail.status).toBe(200);
   expect(thumbnail.headers.get("content-type")).toBe("image/webp");
+
+  // A dynamic template answers any parameter on demand, not only those of getStaticPaths.
+  const guessed = await fetch(`${origin}/og/blog/any-post.000000000000.png`, {
+    redirect: "manual",
+  });
+  expect(guessed.status).toBe(307);
+  const dynamic = await fetch(`${origin}${guessed.headers.get("location")}`);
+  expect(dynamic.status).toBe(200);
+  expect(dynamic.headers.get("content-type")).toBe("image/png");
 
   const outdated = await fetch(`${origin}/og/react/card.000000000000.png`, {
     redirect: "manual",
@@ -149,6 +159,48 @@ describe("on demand", () => {
       timeout
     );
   }
+
+  test(
+    "the page cache keeps pages, and invalidating an image tag renders them again",
+    async () => {
+      await build("node");
+      const cwd = path.join(fixtures, "node");
+      const origin = await serve(
+        process.execPath,
+        ["dist/server/entry.mjs"],
+        cwd,
+        4414
+      );
+      const runs = async () => {
+        const response = await fetch(`${origin}/api/runs`);
+        const body: { runs: number } = await response.json();
+        return body.runs;
+      };
+      const page = async () => {
+        const response = await fetch(origin);
+        await response.text();
+        return response.headers.get("x-astro-cache");
+      };
+      expect(await page()).toBe("MISS");
+      expect(await runs()).toBe(1);
+      expect(await page()).toBe("HIT");
+      expect(await page()).toBe("HIT");
+      // The template did not run again while the page came from the cache.
+      expect(await runs()).toBe(1);
+      const invalidated = await fetch(
+        `${origin}/api/invalidate?tag=og-image:blog/hello`,
+        {
+          headers: { origin },
+          method: "POST",
+        }
+      );
+      expect(invalidated.status).toBe(204);
+      expect(await page()).toBe("MISS");
+      expect(await runs()).toBe(2);
+      expect(await page()).toBe("HIT");
+    },
+    timeout
+  );
 
   test.runIf(hasBun)(
     "Bun",

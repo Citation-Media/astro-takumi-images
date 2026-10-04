@@ -5,3 +5,4 @@ dist/
 fixtures/*/dist/
 *.tgz
 .DS_Store
+fixtures/*/*.log

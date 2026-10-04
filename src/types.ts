@@ -22,20 +22,11 @@ export type ImageEncoding =
   | { format: "jpeg"; quality?: number }
   | { format: "webp"; quality?: number };
 
-/**
- * A component that fills the canvas: a React function component or an Astro component. Its
- * root should take the full width and height, such as `w-full h-full` or `display: flex`.
- */
-// oxlint-disable-next-line typescript/no-explicit-any -- React and Astro components take any props.
-export type ImageComponent = (...args: any[]) => unknown;
-
-/** One image: the component that draws it, its props, and how it is encoded. */
-export type ImageDefinition = ImageEncoding & {
-  component: ImageComponent;
-  props?: Record<string, unknown>;
+/** How a template is drawn: the `image` export of a template file. */
+export type ImageConfig = ImageEncoding & {
   /** A preset or a size in pixels; defaults to `og`, 1200 × 630. */
   size?: SizePreset | ImageSize;
-  /** Further CSS for this image, on top of the integration's `stylesheets`. */
+  /** Further CSS for this template, such as `import css from "./card.css?inline"`. */
   css?: string;
   /** Takumi's image options, such as pre-fetched `sources` for local files and fetch limits. */
   images?: ImagesInput;
@@ -43,19 +34,41 @@ export type ImageDefinition = ImageEncoding & {
   version?: string;
 };
 
-/** Images by key; a key may contain slashes, such as `blog/hello-world`. */
-export type ImageMap = Record<string, ImageDefinition>;
+/**
+ * A template component: an Astro component, or a React function component that may be async.
+ * It fills the canvas, so its root should take the full width and height.
+ */
+// oxlint-disable-next-line typescript/no-explicit-any -- React and Astro components take any props.
+export type ImageComponent = (...args: any[]) => unknown;
 
-/** The default export of the images module: a map, or a function that builds one per request. */
-export type ImageSource = ImageMap | (() => ImageMap | Promise<ImageMap>);
+/** Route parameters of a template, such as `{ slug: "hello" }` for `blog/[slug].astro`. */
+export type ImageParams = Record<string, string>;
 
-/** Options the integration passes to the route at runtime. */
+/** What a template file exports. */
+export interface TemplateModule {
+  default: ImageComponent;
+  image?: ImageConfig;
+  /** The parameter sets to prerender, as for Astro pages; only dynamic templates need it. */
+  getStaticPaths?: () =>
+    | { params: ImageParams }[]
+    | Promise<{ params: ImageParams }[]>;
+}
+
+/** Cache options that `imageUrl(path, Astro)` gives a page that sets none itself. */
+export interface PageCacheOptions {
+  maxAge?: number;
+  swr?: number;
+}
+
+/** Options the integration passes to the runtime. */
 export interface RuntimeConfig {
   route: string;
+  /** Root-relative folder of the templates, such as `/src/og/`. */
+  templates: string;
   /** Versions of this package and Takumi, part of every checksum, so an update renews the URLs. */
   renderer: string;
   cacheMaxAge: number;
-  cacheTags: string[];
+  pageCache: PageCacheOptions | false;
   fonts: boolean;
   tailwind: boolean;
 }

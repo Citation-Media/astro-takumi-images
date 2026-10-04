@@ -1,9 +1,13 @@
 ---
 import { Font } from "astro:assets";
-import { imageUrl } from "astro-takumi-images/runtime";
 
-const react = await imageUrl("react/card");
-const astro = await imageUrl("astro/card");
+interface Props {
+  react: string | undefined;
+  astro: string | undefined;
+  blog: string | undefined;
+}
+
+const { react, astro, blog } = Astro.props;
 ---
 
 <html lang="en">
@@ -16,5 +20,6 @@ const astro = await imageUrl("astro/card");
   <body>
     <img id="react" src={react} alt="" />
     <img id="astro" src={astro} alt="" />
+    <img id="blog" src={blog} alt="" />
   </body>
 </html>

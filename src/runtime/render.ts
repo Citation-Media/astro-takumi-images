@@ -5,16 +5,17 @@ import type { FontLoader, RenderOptions } from "takumi-js";
 import { backend } from "virtual:astro-takumi-images/backend";
 import { config } from "virtual:astro-takumi-images/config";
 import stylesheets from "virtual:astro-takumi-images/css";
-import images from "virtual:astro-takumi-images/images";
 import { renderReact } from "virtual:astro-takumi-images/react";
 
 import { toTakumiCss } from "../css.js";
 import { sizePresets } from "../types.js";
-import type { ImageDefinition, ImageMap, ImageSize } from "../types.js";
-
-/** Loads the project's images; the module may export a map or a function that builds one. */
-export const loadImages = async (): Promise<ImageMap> =>
-  typeof images === "function" ? await images() : images;
+import type {
+  ImageComponent,
+  ImageConfig,
+  ImageParams,
+  ImageSize,
+} from "../types.js";
+import { matchTemplate } from "./templates.js";
 
 // ---------------------------------------------------------------------------------------------
 // Markup: React and Astro components render to HTML as on the server, which Takumi then draws.
@@ -27,26 +28,36 @@ const createContainer = async () => {
   return Container.create();
 };
 
-const isAstroComponent = (component: ImageDefinition["component"]) =>
+const isAstroComponent = (component: ImageComponent) =>
   "isAstroComponentFactory" in component &&
   component.isAstroComponentFactory === true;
 
-const toHtml = async (definition: ImageDefinition) => {
-  const props = definition.props ?? {};
-  if (isAstroComponent(definition.component)) {
+/**
+ * Renders a template with its route parameters, as Astro renders a page: `Astro.params` in an
+ * Astro template, a `params` prop for a React one, which may be async and fetch its own data.
+ */
+const toHtml = async (
+  component: ImageComponent,
+  params: ImageParams,
+  url: URL
+) => {
+  if (isAstroComponent(component)) {
     astroContainer ??= createContainer();
     const container = await astroContainer;
     return container.renderToString(
-      definition.component as Parameters<typeof container.renderToString>[0],
-      { props }
+      component as Parameters<typeof container.renderToString>[0],
+      {
+        params,
+        request: new Request(url),
+      }
     );
   }
   if (!renderReact) {
     throw new Error(
-      "astro-takumi-images: a React component needs `react` and `react-dom` in the project."
+      "astro-takumi-images: a React template needs `react` and `react-dom` in the project."
     );
   }
-  return renderReact(definition.component, props);
+  return renderReact(component, { params });
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -150,7 +161,7 @@ const detectRatioScaling = async () => {
   return pixels.length > 2 * 1 * 4;
 };
 
-const sizeOf = (definition: ImageDefinition): ImageSize => {
+const sizeOf = (definition: ImageConfig): ImageSize => {
   const { size = "og" } = definition;
   return typeof size === "string" ? sizePresets[size] : size;
 };
@@ -189,35 +200,47 @@ const digestOnce = (css: string) => {
   return hash;
 };
 
-export const extensionOf = (definition: ImageDefinition) =>
+export const extensionOf = (definition: ImageConfig) =>
   definition.format === "jpeg" ? "jpg" : (definition.format ?? "png");
 
-export const contentTypeOf = (definition: ImageDefinition) =>
+export const contentTypeOf = (definition: ImageConfig) =>
   `image/${definition.format ?? "png"}`;
 
 /** An image ready to render: its markup, its CSS, and the checksum of both. */
 export interface PreparedImage {
-  definition: ImageDefinition;
+  definition: ImageConfig;
   html: string;
   css: string[];
   size: ImageSize;
   hash: string;
+  /** Path below the route, such as `blog/hello.3f9a1c2e7b04.png`. */
   file: string;
 }
 
 /**
- * Renders the component to HTML and computes the checksum of everything the image is made of:
- * the HTML, the CSS, the font files, the size, and the encoding. The file name carries it, so a
- * changed post, template, theme, or font yields a new URL by itself.
+ * Renders the template of an image path, such as `blog/hello`, to HTML and computes the checksum
+ * of everything the image is made of: the HTML, the CSS, the font files, the size, the encoding,
+ * and the renderer. The file name carries it, so a changed post, template, theme, or font yields
+ * a new URL by itself. `undefined` when no template answers the path.
  */
 export const prepareImage = async (
-  key: string,
-  definition: ImageDefinition
-): Promise<PreparedImage> => {
+  path: string,
+  origin: URL | string = "http://localhost"
+): Promise<PreparedImage | undefined> => {
+  const matched = matchTemplate(path);
+  if (!matched) {
+    return undefined;
+  }
+  const template = await matched.template.load();
+  const definition = template.image ?? {};
   const size = sizeOf(definition);
   const ratio = size.devicePixelRatio ?? 1;
   const canvas = { height: size.height / ratio, width: size.width / ratio };
-  const html = await toHtml(definition);
+  const html = await toHtml(
+    template.default,
+    matched.params,
+    new URL(`${config.route}/${path}`, origin)
+  );
   const css = [cssFor(canvas)];
   if (definition.css) {
     css.push(
@@ -245,7 +268,7 @@ export const prepareImage = async (
   return {
     css,
     definition,
-    file: `${key}.${shortHash}.${extensionOf(definition)}`,
+    file: `${path}.${shortHash}.${extensionOf(definition)}`,
     hash: shortHash,
     html,
     size,

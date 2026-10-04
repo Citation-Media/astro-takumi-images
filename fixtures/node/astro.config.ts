@@ -1,5 +1,5 @@
 import node from "@astrojs/node";
-import { defineConfig } from "astro/config";
+import { defineConfig, memoryCache } from "astro/config";
 
 import { sharedConfig } from "../shared/config.ts";
 
@@ -10,5 +10,7 @@ export default defineConfig({
       "auto",
   }),
   adapter: node({ mode: "standalone" }),
+  // Astro's own in-memory route cache, so the tests cover page caching without a CDN.
+  cache: { provider: memoryCache() },
   output: "server",
 });
