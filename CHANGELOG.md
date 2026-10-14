@@ -5,6 +5,7 @@
 - On Cloudflare, an image rendered on demand reads the site's own font files and the images its template names on the site's own origins from the build, through the adapter's `ASSETS` binding, instead of fetching them. A Worker cannot fetch its own Custom Domain (522), and a domain behind Cloudflare Access answers with its login, so on-demand images failed there; prerendered images, `astro dev`, and other hosts are unchanged.
 - The Cloudflare fixture refuses fetches of the Worker's own built files as Cloudflare does, so the workerd test covers this.
 - README: `imageSource()` on demand does not work on a Cloudflare Custom Domain.
+- The repository moved to https://github.com/JUVOJustin/astro-takumi-images; `homepage`, `bugs`, and `repository` point there, which npm's provenance checks against the repository that publishes.
 
 ## 0.1.0
 

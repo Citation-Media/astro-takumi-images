@@ -12,15 +12,15 @@
     "takumi",
     "withastro"
   ],
-  "homepage": "https://github.com/Citation-Media/astro-takumi-images#readme",
+  "homepage": "https://github.com/JUVOJustin/astro-takumi-images#readme",
   "bugs": {
-    "url": "https://github.com/Citation-Media/astro-takumi-images/issues"
+    "url": "https://github.com/JUVOJustin/astro-takumi-images/issues"
   },
   "license": "MIT",
   "author": "Citation Media <info@citation.media>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Citation-Media/astro-takumi-images.git"
+    "url": "git+https://github.com/JUVOJustin/astro-takumi-images.git"
   },
   "workspaces": [
     "fixtures/*"
