@@ -240,9 +240,15 @@ Cloud machines are slower than a laptop, so expect a multiple of these figures i
 
 `auto` follows the export conditions of the runtime. Set `runtime: "wasm"` where the native addon is missing for the host's CPU or libc, and `runtime: "native"` where a bundler drops the `node` condition.
 
+### Cloudflare
+
+A Worker cannot fetch its own Custom Domain: Cloudflare sends the request past the Worker to an origin behind the domain, which a site served by the Worker alone does not have, and it answers 522. A domain behind Cloudflare Access, such as a Preview's, answers with its login instead. So in a build with `@astrojs/cloudflare`, an image rendered on demand reads the site's own files, its font files and the images its template names on the site's own origins (the request's and `site`'s), from the build through the adapter's `ASSETS` binding, and fetches only what the build does not hold. In `astro dev` and on other hosts it fetches as before.
+
+On demand, `imageSource()` does not work on a Custom Domain: the adapter's image endpoint fetches the image's absolute URL from the Worker's own domain, and the image is no file the `ASSETS` binding holds. Use `imageUrl()` there, or prerender the images that `<Image>` and `<Picture>` process.
+
 ## Fonts
 
-With `fonts: true` (the default), every family of Astro's [Fonts API](https://docs.astro.build/en/guides/fonts/) is registered with Takumi under its CSS variable, and the variable points to it. Font stacks such as `font-family: var(--font-inter), sans-serif` therefore resolve to the same files in the image as on the page: no second font setup and no request to a font service at render time. Variable fonts keep their axes. Only the configured subsets exist; other characters fall back to Takumi's built-in Geist. Fonts loaded through `@font-face` in your CSS do not reach Takumi.
+With `fonts: true` (the default), every family of Astro's [Fonts API](https://docs.astro.build/en/guides/fonts/) is registered with Takumi under its CSS variable, and the variable points to it. Font stacks such as `font-family: var(--font-inter), sans-serif` therefore resolve to the same files in the image as on the page: no second font setup and no request to a font service at render time. Variable fonts keep their axes. Only the configured subsets exist; other characters fall back to Takumi's built-in Geist. Fonts loaded through `@font-face` in your CSS do not reach Takumi. The Fonts API serves its files from the site itself, under `/_astro/fonts/`; on Cloudflare they are read from the build, see [Cloudflare](#cloudflare).
 
 ## CSS
 

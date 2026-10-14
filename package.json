@@ -1,6 +1,6 @@
 {
   "name": "astro-takumi-images",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Astro integration that renders Open Graph images and other social images from your React or Astro components with Takumi, prerendered or on demand, under URLs that change with their content.",
   "keywords": [
     "astro",

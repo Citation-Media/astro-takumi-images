@@ -2,6 +2,7 @@ import type { experimental_AstroContainer } from "astro/container";
 import { experimental_getFontFileURL, fontData } from "astro:assets";
 import { render, renderAnimation } from "takumi-js";
 import type { FontLoader, RenderOptions } from "takumi-js";
+import { readAsset } from "virtual:astro-takumi-images/assets";
 import { backend } from "virtual:astro-takumi-images/backend";
 import { config } from "virtual:astro-takumi-images/config";
 import stylesheets from "virtual:astro-takumi-images/css";
@@ -15,6 +16,7 @@ import type {
   ImageParams,
   ImageSize,
 } from "../types.js";
+import { siteFetch } from "./site-fetch.js";
 import { matchTemplate } from "./templates.js";
 
 // ---------------------------------------------------------------------------------------------
@@ -75,7 +77,14 @@ const fontFormats = new Set([
 ]);
 const fontFiles = new Map<string, Promise<ArrayBuffer>>();
 
-const download = async (url: string) => {
+/**
+ * The `fetch` of a render, which reads the site's own files from its build where the host allows
+ * it (`site-fetch.ts`); the request's origin and `site` are the site's.
+ */
+const fetchFor = (requestUrl: URL | undefined) =>
+  siteFetch({ origins: [requestUrl?.origin, config.site], readAsset });
+
+const download = async (url: string, fetch: typeof globalThis.fetch) => {
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -92,16 +101,19 @@ const download = async (url: string) => {
 };
 
 /** Downloads each font file once per process or isolate. */
-const fetchFont = (url: string) => {
+const fetchFont = (url: string, fetch: typeof globalThis.fetch) => {
   let file = fontFiles.get(url);
   if (!file) {
-    file = download(url);
+    file = download(url, fetch);
     fontFiles.set(url, file);
   }
   return file;
 };
 
-const astroFonts = (requestUrl: URL | undefined): FontLoader[] =>
+const astroFonts = (
+  requestUrl: URL | undefined,
+  fetch: typeof globalThis.fetch
+): FontLoader[] =>
   Object.entries(fontData).flatMap(([variable, faces]) => {
     // Faces by file: a file that serves several weights is a variable font.
     const files = new Map<
@@ -125,7 +137,8 @@ const astroFonts = (requestUrl: URL | undefined): FontLoader[] =>
       const [only] = file.weights;
       const weight = file.weights.size === 1 ? Number(only) : Number.NaN;
       return {
-        data: () => fetchFont(experimental_getFontFileURL(url, requestUrl)),
+        data: () =>
+          fetchFont(experimental_getFontFileURL(url, requestUrl), fetch),
         name: familyOf(variable),
         style: file.style === "italic" ? "italic" : "normal",
         // Without a weight, a variable font keeps its axes live; with one, a static file keeps
@@ -292,11 +305,14 @@ export const renderPrepared = async (
   const ratio = size.devicePixelRatio ?? 1;
   ratioScalesOutput ??= detectRatioScaling();
   const scaled = await ratioScalesOutput;
+  const fetch = fetchFor(requestUrl);
+  // A template's own image options win; otherwise images its markup names load like the fonts.
+  const images = definition.images ?? { cache: decodeCache, fetch };
   const shared = {
     ...backend,
     css: image.css,
     devicePixelRatio: ratio,
-    fonts: config.fonts ? astroFonts(requestUrl) : [],
+    fonts: config.fonts ? astroFonts(requestUrl, fetch) : [],
     height: scaled ? size.height / ratio : size.height,
     width: scaled ? size.width / ratio : size.width,
   };
@@ -307,6 +323,7 @@ export const renderPrepared = async (
     const timeline = {
       ...shared,
       fps: definition.animation.fps ?? 30,
+      images,
       scenes: [{ durationMs: definition.animation.duration, node: image.html }],
     };
     // Takumi types each animation format separately, and only WebP takes a quality.
@@ -329,7 +346,7 @@ export const renderPrepared = async (
   const options: RenderOptions = {
     ...shared,
     ...encoding,
-    images: definition.images ?? { cache: decodeCache },
+    images,
   };
   return render(image.html, options);
 };

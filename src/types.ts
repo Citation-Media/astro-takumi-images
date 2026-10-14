@@ -87,6 +87,8 @@ export interface RuntimeConfig {
   templates: string;
   /** Versions of this package and Takumi, part of every checksum, so an update renews the URLs. */
   renderer: string;
+  /** The origin of Astro's `site`, one of the site's own origins besides the request's. */
+  site: string | undefined;
   cacheMaxAge: number;
   pageCache: PageCacheOptions | false;
   fonts: boolean;

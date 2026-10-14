@@ -1,5 +1,7 @@
 {
   "name": "astro-takumi-images-fixture",
+  // Refuses fetches of the Worker's own built files, as Cloudflare does on a Custom Domain.
+  "main": "./src/worker.ts",
   "compatibility_date": "2026-09-24",
   "compatibility_flags": ["nodejs_compat"],
 }
