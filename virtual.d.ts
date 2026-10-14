@@ -1,6 +1,12 @@
 // Ambient module declarations cannot import types, so they reference them inline.
 // oxlint-disable typescript/consistent-type-imports
 
+declare module "virtual:astro-takumi-images/assets" {
+  export const readAsset:
+    | import("./src/runtime/site-fetch.ts").AssetReader
+    | undefined;
+}
+
 declare module "virtual:astro-takumi-images/config" {
   export const config: import("./src/types.ts").RuntimeConfig;
 }

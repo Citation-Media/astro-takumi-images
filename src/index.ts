@@ -78,10 +78,31 @@ export interface TakumiImagesOptions {
 }
 
 const prefix = "virtual:astro-takumi-images/";
-const modules = ["config", "templates", "css", "backend", "react"] as const;
+const modules = [
+  "assets",
+  "config",
+  "templates",
+  "css",
+  "backend",
+  "react",
+] as const;
 
 /** Thirty minutes of freshness, then a day in which the cache serves the page while it renders. */
 const defaultPageCache: PageCacheOptions = { maxAge: 1800, swr: 86_400 };
+
+/**
+ * How a render reads the site's own files, see `runtime/site-fetch.ts`: in a Cloudflare build,
+ * through the `ASSETS` binding the adapter configures, so a Worker never fetches its own domain;
+ * the binding is missing while the adapter prerenders, which then fetches as everywhere else.
+ * In development Vite serves the files, and other hosts reach their own address.
+ */
+const assetsModule = (cloudflareBuild: boolean) =>
+  cloudflareBuild
+    ? [
+        `import { env } from "cloudflare:workers";`,
+        `export const readAsset = env?.ASSETS ? (request) => env.ASSETS.fetch(request) : undefined;`,
+      ].join("\n")
+    : "export const readAsset = undefined;";
 
 const backendModule = (runtime: TakumiRuntime) => {
   if (runtime === "native") {
@@ -163,7 +184,12 @@ export default function takumiImages(
           : appendFile(file, `${existing.endsWith("\n") ? "" : "\n"}${rule}`));
         logger.info(`Added an immutable cache rule for ${route}/* to _headers`);
       },
-      "astro:config:setup": ({ config, injectRoute, updateConfig }) => {
+      "astro:config:setup": ({
+        command,
+        config,
+        injectRoute,
+        updateConfig,
+      }) => {
         const root = fileURLToPath(config.root);
         prerender = options.prerender ?? config.output === "static";
         const require = createRequire(import.meta.url);
@@ -175,6 +201,7 @@ export default function takumiImages(
           prerender,
           renderer: `astro-takumi-images@${packageVersion(require, "astro-takumi-images")} takumi-js@${packageVersion(require, "takumi-js")}`,
           route,
+          site: config.site ? new URL(config.site).origin : undefined,
           tailwind: options.tailwind ?? true,
           templates,
         };
@@ -183,6 +210,10 @@ export default function takumiImages(
             `import sheet${index} from ${JSON.stringify(`${fromRoot(root, sheet)}?inline`)};`
         );
         const sources: Record<(typeof modules)[number], string> = {
+          assets: assetsModule(
+            command === "build" &&
+              config.adapter?.name === "@astrojs/cloudflare"
+          ),
           backend: backendModule(runtime),
           config: `export const config = ${JSON.stringify(runtimeConfig)};`,
           css: [
